@@ -1,5 +1,5 @@
 ---
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: ClusterBuildStrategy
 metadata:
   name: buildkit
@@ -27,7 +27,7 @@ spec:
     description: "The secrets to pass to the build. Values must be in the format ID=FILE_CONTENT."
     type: array
     defaults: []
-  buildSteps:
+  steps:
     - name: build-and-push
       image: moby/buildkit:nightly-rootless
       imagePullPolicy: Always
