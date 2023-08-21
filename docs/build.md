@@ -76,21 +76,17 @@ To prevent users from triggering `BuildRuns` (_execution of a Build_) that will 
 The `Build` definition supports the following fields:
 
 - Required:
-  - [`apiVersion`](https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields) - Specifies the API version, for example `shipwright.io/v1alpha1`.
+  - [`apiVersion`](https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields) - Specifies the API version, for example `shipwright.io/v1beta1`.
   - [`kind`](https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields) - Specifies the Kind type, for example `Build`.
   - [`metadata`](https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields) - Metadata that identify the custom resource instance, especially the name of the `Build`, and in which [namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/) you place it. **Note**: You should use your own namespace, and not put your builds into the shipwright-build namespace where Shipwright's system components run.
   - `spec.source` - Refers to the location of the source code, for example a Git repository or source bundle image.
   - `spec.strategy` - Refers to the `BuildStrategy` to be used, see the [examples](../samples/buildstrategy)
-  - `spec.builder.image` - Refers to the image containing the build tools to build the source code. (_Use this path for Dockerless strategies, this is just required for `source-to-image` buildStrategy_) **This field has been deprecated, and will be removed in a future release.**
   - `spec.output`- Refers to the location where the generated image would be pushed.
-  - `spec.output.credentials.name`- Reference an existing secret to get access to the container registry.
+  - `spec.output.pushSecret`- Reference an existing secret to get access to the container registry.
 
 - Optional:
   - `spec.paramValues` - Refers to a name-value(s) list to specify values for `parameters` defined in the `BuildStrategy`.
-  - `spec.dockerfile` - Path to a Dockerfile to be used for building an image. (_Use this path for strategies that require a Dockerfile_). **This field has been deprecated, and will be removed in a future release.**
-  - `spec.sources` - [Sources](#sources) describes a slice of artifacts that will be imported into the project context before the actual build process starts. **This field has been deprecated, and will be removed in a future release.**
   - `spec.timeout` - Defines a custom timeout. The value needs to be parsable by [ParseDuration](https://golang.org/pkg/time/#ParseDuration), for example, `5m`. The default is ten minutes. You can overwrite the value in the `BuildRun`.
-  - `metadata.annotations[build.shipwright.io/build-run-deletion]` - Defines if delete all related BuildRuns when deleting the Build. The default is `false`.
   - `spec.output.annotations` - Refers to a list of `key/value` that could be used to [annotate](https://github.com/opencontainers/image-spec/blob/main/annotations.md) the output image.
   - `spec.output.labels` - Refers to a list of `key/value` that could be used to label the output image.
   - `spec.env` - Specifies additional environment variables that should be passed to the build container. The available variables depend on the tool that is being used by the chosen build strategy.
@@ -103,11 +99,9 @@ The `Build` definition supports the following fields:
 
 A `Build` resource can specify a Git repository or bundle image source, together with other parameters like:
 
-- `source.url` - Specify the source location using a Git repository.
-- `source.bundleContainer.image` - Specify a source bundle container image to be used as the source.
-- `source.bundleContainer.prune` - Configure whether the source bundle image should be deleted after the source was obtained (defaults to `Never`, other option is `AfterPull` to delete the image after a successful image pull).
-- `source.credentials.name` - For private repositories or registries, the name references a secret in the namespace that contains the SSH private key or Docker access credentials, respectively.
-- `source.revision` - A specific revision to select from the source repository, this can be a commit, tag or branch name. If not defined, it will fallback to the Git repository default branch.
+- `source.git.url` - Specify the source location using a Git repository.
+- `source.git.cloneSecret` - For private repositories or registries, the name references a secret in the namespace that contains the SSH private key or Docker access credentials, respectively.
+- `source.git.revision` - A specific revision to select from the source repository, this can be a commit, tag or branch name. If not defined, it will fallback to the Git repository default branch.
 - `source.contextDir` - For repositories where the source code is not located at the root folder, you can specify this path here.
 
 By default, the Build controller does not validate that the Git repository exists. If the validation is desired, users can explicitly define the `build.shipwright.io/verify.repository` annotation with `true`. For example:
@@ -115,7 +109,7 @@ By default, the Build controller does not validate that the Git repository exist
 Example of a `Build` with the **build.shipwright.io/verify.repository** annotation to enable the `spec.source.url` validation.
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
@@ -123,63 +117,67 @@ metadata:
     build.shipwright.io/verify.repository: "true"
 spec:
   source:
-    url: https://github.com/shipwright-io/sample-go
+    git:
+      url: https://github.com/shipwright-io/sample-go
     contextDir: docker-build
 ```
 
-_Note_: The Build controller only validates two scenarios. The first one is when the endpoint uses an `http/https` protocol. The second one is when an `ssh` protocol such as `git@` has been defined but a referenced secret, such as `source.credentials.name`, has not been provided.
+_Note_: The Build controller only validates two scenarios. The first one is when the endpoint uses an `http/https` protocol. The second one is when an `ssh` protocol such as `git@` has been defined but a referenced secret, such as `source.git.cloneSecret`, has not been provided.
 
 Example of a `Build` with a source with **credentials** defined by the user.
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildpack-nodejs-build
 spec:
   source:
-    url: https://github.com/sclorg/nodejs-ex
-    credentials:
-      name: source-repository-credentials
+    git:
+      url: https://github.com/sclorg/nodejs-ex
+      cloneSecrt: source-repository-credentials
 ```
 
 Example of a `Build` with a source that specifies a specific subfolder on the repository.
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-custom-context-dockerfile
 spec:
   source:
-    url: https://github.com/SaschaSchwarze0/npm-simple
+    git:
+      url: https://github.com/SaschaSchwarze0/npm-simple
     contextDir: renamed
 ```
 
 Example of a `Build` that specifies the tag `v0.1.0` for the git repository:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
 spec:
   source:
-    url: https://github.com/shipwright-io/sample-go
+    git:
+      url: https://github.com/shipwright-io/sample-go
+      revision: v0.1.0
     contextDir: docker-build
-    revision: v0.1.0
 ```
 
 Example of a `Build` that specifies environment variables:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
 spec:
   source:
-    url: https://github.com/shipwright-io/sample-go
+    git:
+      url: https://github.com/shipwright-io/sample-go
     contextDir: docker-build
   env:
     - name: EXAMPLE_VAR_1
@@ -192,13 +190,14 @@ Example of a `Build` that uses the Kubernetes Downward API to
 expose a `Pod` field as an environment variable:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
 spec:
   source:
-    url: https://github.com/shipwright-io/sample-go
+    git:
+      url: https://github.com/shipwright-io/sample-go
     contextDir: docker-build
   env:
     - name: POD_NAME
@@ -211,13 +210,14 @@ Example of a `Build` that uses the Kubernetes Downward API to
 expose a `Container` field as an environment variable:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
 spec:
   source:
-    url: https://github.com/shipwright-io/sample-go
+    git:
+      url: https://github.com/shipwright-io/sample-go
     contextDir: docker-build
   env:
     - name: MEMORY_LIMIT
@@ -241,7 +241,7 @@ A `Build` resource can specify the `BuildStrategy` to use, these are:
 Defining the strategy is straightforward. You define the `name` and the `kind`. For example:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildpack-nodejs-build
@@ -271,7 +271,7 @@ In general, _paramValues_ are tightly bound to Strategy _parameters_. Please mak
 The [BuildKit sample `BuildStrategy`](../samples/buildstrategy/buildkit/buildstrategy_buildkit_cr.yaml) contains various parameters. Two of them are outlined here:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: ClusterBuildStrategy
 metadata:
   name: buildkit
@@ -287,14 +287,14 @@ spec:
     type: string
     default: registry
   ...
-  buildSteps:
+  steps:
   ...
 ```
 
 The `cache` parameter is a simple string. You can provide it like this in your Build:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: a-build
@@ -327,7 +327,7 @@ data:
 You reference the ConfigMap as a parameter value like this:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: a-build
@@ -350,7 +350,7 @@ spec:
 The `build-args` parameter is defined as an array. In the BuildKit strategy, you use `build-args` to set the [`ARG` values in the Dockerfile](https://docs.docker.com/engine/reference/builder/#arg), specified as key-value pairs separated by an equals sign, for example, `NODE_VERSION=16`. Your Build then looks like this (the value for `cache` is retained to outline how multiple _paramValue_ can be set):
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: a-build
@@ -376,7 +376,7 @@ spec:
 Like simple values, you can also reference ConfigMaps and Secrets for every item in the array. Example:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: a-build
@@ -422,7 +422,7 @@ Here, we pass three items in the `build-args` array:
 In the `Build` resource, you use the `spec.builder` or `spec.dockerfile` parameters to specify the image that contains the tools to build the final image. For example, the following Build definition specifies a `Dockerfile` image.
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildah-golang-build
@@ -439,7 +439,7 @@ spec:
 Another example is when the user chooses the `builder` image for a specific language as part of the `source-to-image` buildStrategy:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: s2i-nodejs-build
@@ -463,7 +463,7 @@ A `Build` resource can specify the output where it should push the image. For ex
 For example, the user specifies a public registry:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: s2i-nodejs-build
@@ -483,7 +483,7 @@ spec:
 Another example is when the user specifies a private registry:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: s2i-nodejs-build
@@ -505,7 +505,7 @@ spec:
 Example of user specifies image annotations and labels:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: s2i-nodejs-build
@@ -556,7 +556,7 @@ As part of the retention parameters, we have the following fields:
 An example of a user using both TTL and Limit retention fields. In case of such a configuration, BuildRun will get deleted once the first criteria is met.
 
 ```yaml
-  apiVersion: shipwright.io/v1alpha1
+  apiVersion: shipwright.io/v1beta1
   kind: Build
   metadata:
     name: build-retention-ttl
@@ -590,7 +590,7 @@ all the usual `volumeSource` types are supported.
 Here is an example of `Build` object that overrides `volumes`:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: build-name
@@ -618,7 +618,7 @@ Using the triggers, you can submit `BuildRun` instances when certain events happ
 The types of events under watch are defined on the `.spec.trigger` attribute, please consider the following example:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 spec:
   source:
@@ -719,7 +719,7 @@ spec:
 Sources represent remote artifacts, as in external entities added to the build context before the actual Build starts. Therefore, you may employ `.spec.sources` to download artifacts from external repositories.
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: nodejs-ex
@@ -745,7 +745,7 @@ At this initial stage, authentication is not supported; therefore, you can only 
 A `Build` can automatically delete a related `BuildRun`. To enable this feature set the  `build.shipwright.io/build-run-deletion` annotation to `true` in the `Build` instance. This annotation is not present in a `Build` definition by default. See an example of how to define this annotation:
 
 ```yaml
-apiVersion: shipwright.io/v1alpha1
+apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: kaniko-golang-build
