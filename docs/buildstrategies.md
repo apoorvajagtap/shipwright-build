@@ -133,7 +133,13 @@ For each namespace where you want to use the strategy, you also need to apply th
 account to run the strategy. If the service account is named `pipeline` (default), you can use:
 
 ```sh
-kubectl apply -n <namespace> -f  samples/v1beta1/buildstrategy/multiarch-native-buildah/
+kubectl apply -n <namespace> -f samples/v1beta1/buildstrategy/multiarch-native-buildah/
+```
+
+_note_: If `pipeline` service account isn't available in your environment (most likely when using a kind cluster), replace the subjects[0].name to `default`.
+
+```sh
+sed 's/name: pipeline/name: default/' samples/v1beta1/buildstrategy/multiarch-native-buildah/rolebinding_multiarch_native_buildah_cr.yaml| kubectl apply -f -
 ```
 
 ### Parameters
